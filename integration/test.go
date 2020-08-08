@@ -167,6 +167,40 @@ func testRaw(t *testing.T, cb func(*client)) {
 	cb(client)
 }
 
+func testAuth(t *testing.T, passwd string, cb func(*client)) {
+	t.Helper()
+
+	sMini, err := miniredis.Run()
+	ok(t, err)
+	defer sMini.Close()
+	sMini.RequireAuth(passwd)
+
+	sReal, sRealAddr := RedisAuth(passwd)
+	defer sReal.Close()
+
+	client := newClient(t, sRealAddr, sMini.Addr())
+
+	cb(client)
+}
+
+func testUserAuth(t *testing.T, users map[string]string, cb func(*client)) {
+	t.Helper()
+
+	sMini, err := miniredis.Run()
+	ok(t, err)
+	defer sMini.Close()
+	for user, pass := range users {
+		sMini.RequireUserAuth(user, pass)
+	}
+
+	sReal, sRealAddr := RedisUserAuth(users)
+	defer sReal.Close()
+
+	client := newClient(t, sRealAddr, sMini.Addr())
+
+	cb(client)
+}
+
 // like testCommands, but multiple connections
 func testMultiCommands(t *testing.T, cs ...func(chan<- command, *miniredis.Miniredis)) {
 	t.Helper()
@@ -267,20 +301,6 @@ func testAuthCommands(t *testing.T, passwd string, commands ...command) {
 	sMini.RequireAuth(passwd)
 
 	sReal, sRealAddr := RedisAuth(passwd)
-	defer sReal.Close()
-	runCommands(t, sRealAddr, sMini.Addr(), commands)
-}
-
-func testUserAuthCommands(t *testing.T, users map[string]string, commands ...command) {
-	t.Helper()
-	sMini, err := miniredis.Run()
-	ok(t, err)
-	defer sMini.Close()
-	for user, pass := range users {
-		sMini.RequireUserAuth(user, pass)
-	}
-
-	sReal, sRealAddr := RedisUserAuth(users)
 	defer sReal.Close()
 	runCommands(t, sRealAddr, sMini.Addr(), commands)
 }
