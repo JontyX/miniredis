@@ -184,6 +184,29 @@ func testRaw2(t *testing.T, cb func(*client, *client)) {
 	cb(client1, client2)
 }
 
+// like testRaw2, but with connections in Go routines
+func testMulti(t *testing.T, cbs ...func(*client)) {
+	t.Helper()
+
+	sMini, err := miniredis.Run()
+	ok(t, err)
+	defer sMini.Close()
+
+	sReal, sRealAddr := Redis()
+	defer sReal.Close()
+
+	var wg sync.WaitGroup
+	for _, cb := range cbs {
+		wg.Add(1)
+		go func(cb func(*client)) {
+			client := newClient(t, sRealAddr, sMini)
+			cb(client)
+			wg.Done()
+		}(cb)
+	}
+	wg.Wait()
+}
+
 func testAuth(t *testing.T, passwd string, cb func(*client)) {
 	t.Helper()
 
