@@ -201,6 +201,21 @@ func testUserAuth(t *testing.T, users map[string]string, cb func(*client)) {
 	cb(client)
 }
 
+func testCluster(t *testing.T, cb func(*client)) {
+	t.Helper()
+
+	sMini, err := miniredis.Run()
+	ok(t, err)
+	defer sMini.Close()
+
+	sReal, sRealAddr := RedisCluster()
+	defer sReal.Close()
+
+	client := newClient(t, sRealAddr, sMini.Addr())
+
+	cb(client)
+}
+
 // like testCommands, but multiple connections
 func testMultiCommands(t *testing.T, cs ...func(chan<- command, *miniredis.Miniredis)) {
 	t.Helper()
@@ -291,17 +306,6 @@ func testClients2(t *testing.T, f func(c1, c2 chan<- command)) {
 			runCommand(t, chans[1].cMini, chans[1].cReal, cm)
 		}
 	}
-}
-
-func testClusterCommands(t *testing.T, commands ...command) {
-	t.Helper()
-	sMini, err := miniredis.Run()
-	ok(t, err)
-	defer sMini.Close()
-
-	sReal, sRealAddr := RedisCluster()
-	defer sReal.Close()
-	runCommands(t, sRealAddr, sMini.Addr(), commands)
 }
 
 func runCommands(t *testing.T, realAddr, miniAddr string, commands []command) {
@@ -444,6 +448,9 @@ func looselyEqual(a, b interface{}) bool {
 	case int64:
 		_, ok := b.(int64)
 		return ok
+	case int:
+		_, ok := b.(int)
+		return ok
 	case error:
 		_, ok := b.(error)
 		return ok
@@ -541,17 +548,47 @@ func (c *client) Do(cmd string, args ...string) {
 		c.t.Errorf("error from realredis: %s", errReal)
 		return
 	}
-
 	resMini, errMini := c.mini.Do(append([]string{cmd}, args...)...)
 	if errMini != nil {
 		c.t.Errorf("error from miniredis: %s", errMini)
 		return
 	}
 
-	c.t.Logf("want %q have %q\n", string(resReal), string(resMini))
+	c.t.Logf("real:%q mini:%q", string(resReal), string(resMini))
 
 	if resReal != resMini {
 		c.t.Errorf("expected: %q got: %q", string(resReal), string(resMini))
+	}
+}
+
+// result must kinda match (just the structure, exact values are not compared)
+func (c *client) DoLoosly(cmd string, args ...string) {
+	c.t.Helper()
+
+	resReal, errReal := c.real.Do(append([]string{cmd}, args...)...)
+	if errReal != nil {
+		c.t.Errorf("error from realredis: %s", errReal)
 		return
+	}
+	resMini, errMini := c.mini.Do(append([]string{cmd}, args...)...)
+	if errMini != nil {
+		c.t.Errorf("error from miniredis: %s", errMini)
+		return
+	}
+
+	c.t.Logf("real:%q mini:%q", string(resReal), string(resMini))
+
+	mini, err := proto.Parse(resMini)
+	if err != nil {
+		c.t.Errorf("parse error miniredis: %s", err)
+		return
+	}
+	real, err := proto.Parse(resReal)
+	if err != nil {
+		c.t.Errorf("parse error realredis: %s", err)
+		return
+	}
+	if !looselyEqual(real, mini) {
+		c.t.Errorf("expected a loose match want: %#v have: %#v", real, mini)
 	}
 }
