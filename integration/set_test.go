@@ -302,15 +302,12 @@ func TestSscan(t *testing.T) {
 }
 
 func TestSetNoAuth(t *testing.T) {
-	testAuthCommands(t,
+	testAuth(t,
 		"supersecret",
-		failWith(
-			"NOAUTH Authentication required.",
-			"SET", "foo", "bar",
-		),
-		succ("AUTH", "supersecret"),
-		succ(
-			"SET", "foo", "bar",
-		),
+		func(c *client) {
+			c.Do("SET", "foo", "bar")
+			c.Do("AUTH", "supersecret")
+			c.Do("SET", "foo", "bar")
+		},
 	)
 }

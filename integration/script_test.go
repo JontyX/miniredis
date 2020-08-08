@@ -334,16 +334,13 @@ func TestLuaCall(t *testing.T) {
 }
 
 func TestScriptNoAuth(t *testing.T) {
-	testAuthCommands(t,
+	testAuth(t,
 		"supersecret",
-		failWith(
-			"NOAUTH Authentication required.",
-			"EVAL", `redis.call("ECHO", "foo")`, 0,
-		),
-		succ("AUTH", "supersecret"),
-		succ(
-			"EVAL", `redis.call("ECHO", "foo")`, 0,
-		),
+		func(c *client) {
+			c.Do("EVAL", `redis.call("ECHO", "foo")`, "0")
+			c.Do("AUTH", "supersecret")
+			c.Do("EVAL", `redis.call("ECHO", "foo")`, "0")
+		},
 	)
 }
 

@@ -293,18 +293,6 @@ func testClients2(t *testing.T, f func(c1, c2 chan<- command)) {
 	}
 }
 
-func testAuthCommands(t *testing.T, passwd string, commands ...command) {
-	t.Helper()
-	sMini, err := miniredis.Run()
-	ok(t, err)
-	defer sMini.Close()
-	sMini.RequireAuth(passwd)
-
-	sReal, sRealAddr := RedisAuth(passwd)
-	defer sReal.Close()
-	runCommands(t, sRealAddr, sMini.Addr(), commands)
-}
-
 func testClusterCommands(t *testing.T, commands ...command) {
 	t.Helper()
 	sMini, err := miniredis.Run()
