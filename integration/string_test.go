@@ -3,6 +3,7 @@
 package main
 
 import (
+	"strconv"
 	"testing"
 )
 
@@ -433,63 +434,53 @@ func TestBitpos(t *testing.T) {
 }
 
 func TestGetbit(t *testing.T) {
-	commands := []command{
-		succ("SET", "a", "\x00\x0f"),
-		succ("SET", "e", "\xff\xff\xff"),
-		succ("GETBIT", "nosuch", 1),
-		succ("GETBIT", "nosuch", 0),
+	testRaw(t, func(c *client) {
+		for i := 0; i < 100; i++ {
+			c.Do("SET", "a", "\x00\x0f")
+			c.Do("SET", "e", "\xff\xff\xff")
+			c.Do("GETBIT", "nosuch", "1")
+			c.Do("GETBIT", "nosuch", "0")
 
-		// Error cases
-		succ("HSET", "hash", "aap", "noot"),
-		fail("GETBIT", "hash", 1),
-		fail("GETBIT", "a", "aap"),
-		fail("GETBIT", "a"),
-		fail("GETBIT", "too", 1, "many"),
-	}
+			// Error cases
+			c.Do("HSET", "hash", "aap", "noot")
+			c.Do("GETBIT", "hash", "1")
+			c.Do("GETBIT", "a", "aap")
+			c.Do("GETBIT", "a")
+			c.Do("GETBIT", "too", "1", "many")
 
-	// Generate read commands.
-	for i := range make([]struct{}, 100) {
-		commands = append(commands,
-			succ("GETBIT", "a", i),
-			succ("GETBIT", "e", i),
-		)
-	}
-
-	testCommands(t, commands...)
+			c.Do("GETBIT", "a", strconv.Itoa(i))
+			c.Do("GETBIT", "e", strconv.Itoa(i))
+		}
+	})
 }
 
 func TestSetbit(t *testing.T) {
-	commands := []command{
-		succ("SET", "a", "\x00\x0f"),
-		succ("SETBIT", "a", 0, 1),
-		succ("GET", "a"),
-		succ("SETBIT", "a", 0, 0),
-		succ("GET", "a"),
-		succ("SETBIT", "a", 13, 0),
-		succ("GET", "a"),
-		succ("SETBIT", "nosuch", 11111, 1),
-		succ("GET", "nosuch"),
+	testRaw(t, func(c *client) {
+		for i := 0; i < 100; i++ {
+			c.Do("SET", "a", "\x00\x0f")
+			c.Do("SETBIT", "a", "0", "1")
+			c.Do("GET", "a")
+			c.Do("SETBIT", "a", "0", "0")
+			c.Do("GET", "a")
+			c.Do("SETBIT", "a", "13", "0")
+			c.Do("GET", "a")
+			c.Do("SETBIT", "nosuch", "11111", "1")
+			c.Do("GET", "nosuch")
 
-		// Error cases
-		succ("HSET", "hash", "aap", "noot"),
-		fail("SETBIT", "hash", 1, 1),
-		fail("SETBIT", "a", "aap", 0),
-		fail("SETBIT", "a", 0, "aap"),
-		fail("SETBIT", "a", -1, 0),
-		fail("SETBIT", "a", 1, -1),
-		fail("SETBIT", "a", 1, 2),
-		fail("SETBIT", "too", 1, 2, "many"),
-	}
+			// Error cases
+			c.Do("HSET", "hash", "aap", "noot")
+			c.Do("SETBIT", "hash", "1", "1")
+			c.Do("SETBIT", "a", "aap", "0")
+			c.Do("SETBIT", "a", "0", "aap")
+			c.Do("SETBIT", "a", "-1", "0")
+			c.Do("SETBIT", "a", "1", "-1")
+			c.Do("SETBIT", "a", "1", "2")
+			c.Do("SETBIT", "too", "1", "2", "many")
 
-	// Generate read commands.
-	for i := range make([]struct{}, 100) {
-		commands = append(commands,
-			succ("GETBIT", "a", i),
-			succ("GETBIT", "e", i),
-		)
-	}
-
-	testCommands(t, commands...)
+			c.Do("GETBIT", "a", strconv.Itoa(i))
+			c.Do("GETBIT", "e", strconv.Itoa(i))
+		}
+	})
 }
 
 func TestAppend(t *testing.T) {
