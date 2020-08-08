@@ -162,9 +162,26 @@ func testRaw(t *testing.T, cb func(*client)) {
 	sReal, sRealAddr := Redis()
 	defer sReal.Close()
 
-	client := newClient(t, sRealAddr, sMini.Addr())
+	client := newClient(t, sRealAddr, sMini)
 
 	cb(client)
+}
+
+// like testRaw, but with two connections
+func testRaw2(t *testing.T, cb func(*client, *client)) {
+	t.Helper()
+
+	sMini, err := miniredis.Run()
+	ok(t, err)
+	defer sMini.Close()
+
+	sReal, sRealAddr := Redis()
+	defer sReal.Close()
+
+	client1 := newClient(t, sRealAddr, sMini)
+	client2 := newClient(t, sRealAddr, sMini)
+
+	cb(client1, client2)
 }
 
 func testAuth(t *testing.T, passwd string, cb func(*client)) {
@@ -178,7 +195,7 @@ func testAuth(t *testing.T, passwd string, cb func(*client)) {
 	sReal, sRealAddr := RedisAuth(passwd)
 	defer sReal.Close()
 
-	client := newClient(t, sRealAddr, sMini.Addr())
+	client := newClient(t, sRealAddr, sMini)
 
 	cb(client)
 }
@@ -196,7 +213,7 @@ func testUserAuth(t *testing.T, users map[string]string, cb func(*client)) {
 	sReal, sRealAddr := RedisUserAuth(users)
 	defer sReal.Close()
 
-	client := newClient(t, sRealAddr, sMini.Addr())
+	client := newClient(t, sRealAddr, sMini)
 
 	cb(client)
 }
@@ -211,7 +228,7 @@ func testCluster(t *testing.T, cb func(*client)) {
 	sReal, sRealAddr := RedisCluster()
 	defer sReal.Close()
 
-	client := newClient(t, sRealAddr, sMini.Addr())
+	client := newClient(t, sRealAddr, sMini)
 
 	cb(client)
 }
@@ -521,21 +538,23 @@ func roundFloats(r interface{}, pos int) interface{} {
 type client struct {
 	t          *testing.T
 	real, mini *proto.Client
+	miniredis  *miniredis.Miniredis // in case you need m.FastForward() and friends
 }
 
-func newClient(t *testing.T, realAddr, miniAddr string) *client {
+func newClient(t *testing.T, realAddr string, mini *miniredis.Miniredis) *client {
 	t.Helper()
 
 	cReal, err := proto.Dial(realAddr)
 	ok(t, err)
 
-	cMini, err := proto.Dial(miniAddr)
+	cMini, err := proto.Dial(mini.Addr())
 	ok(t, err)
 
 	return &client{
-		t:    t,
-		real: cReal,
-		mini: cMini,
+		t:         t,
+		miniredis: mini,
+		real:      cReal,
+		mini:      cMini,
 	}
 }
 
@@ -558,6 +577,41 @@ func (c *client) Do(cmd string, args ...string) {
 
 	if resReal != resMini {
 		c.t.Errorf("expected: %q got: %q", string(resReal), string(resMini))
+	}
+}
+
+// result must be []string, and we'll sort them before comparing
+func (c *client) DoSorted(cmd string, args ...string) {
+	c.t.Helper()
+
+	resReal, errReal := c.real.Do(append([]string{cmd}, args...)...)
+	if errReal != nil {
+		c.t.Errorf("error from realredis: %s", errReal)
+		return
+	}
+	resMini, errMini := c.mini.Do(append([]string{cmd}, args...)...)
+	if errMini != nil {
+		c.t.Errorf("error from miniredis: %s", errMini)
+		return
+	}
+
+	c.t.Logf("real:%q mini:%q", string(resReal), string(resMini))
+	realStrings, err := proto.ReadStrings(resReal)
+	if err != nil {
+		c.t.Errorf("readstrings realredis: %s", errReal)
+		return
+	}
+	miniStrings, err := proto.ReadStrings(resMini)
+	if err != nil {
+		c.t.Errorf("readstrings miniredis: %s", errReal)
+		return
+	}
+
+	sort.Strings(realStrings)
+	sort.Strings(miniStrings)
+
+	if !reflect.DeepEqual(realStrings, miniStrings) {
+		c.t.Errorf("expected: %q got: %q", realStrings, miniStrings)
 	}
 }
 
